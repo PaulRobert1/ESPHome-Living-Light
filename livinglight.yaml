@@ -1,0 +1,62 @@
+substitutions:
+  device_name: sonoff_mini_r2_template
+esphome:
+  name: livinglight
+  friendly_name: LivingLight
+
+esp8266:
+  board: esp8285
+
+# Enable logging
+logger:
+
+# Enable Home Assistant API
+api:
+  batch_delay: 0ms
+  reboot_timeout: 5min
+  encryption:
+    key: !secret api_encryption_key
+
+ota:
+  - platform: esphome
+    password: !secret ota_password
+
+wifi:
+  post_connect_roaming: false
+  networks:
+    - ssid: !secret wifi_networks_ssid
+      password: !secret wifi_networks_password
+      bssid: !secret wifi_networks_bssid
+      priority: 2.0
+
+    - ssid: !secret wifi_networks_ssid_2
+      password: !secret wifi_networks_password_2
+      priority: 1.0
+
+  power_save_mode: none
+  fast_connect: true
+  output_power: 17dB
+  reboot_timeout: 5min
+
+text_sensor:
+  - platform: wifi_info
+    ip_address:
+      name: "Mini IP"
+    bssid:
+      name: "Mini BSSID"
+
+# Enable Web server
+web_server:
+  port: 80
+
+
+sensor:
+
+status_led:
+  pin:
+    number: GPIO13
+    inverted: true
+
+
+packages:
+  wall_controls: !include packages/wall_switch_controls.yaml

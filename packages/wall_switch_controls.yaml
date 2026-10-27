@@ -1,0 +1,94 @@
+# Shared Sonoff MINI controls. wall_on_level must match the physical ON position.
+substitutions:
+  wall_on_level: "true"
+  smart_bulbs: "true"
+  relay_name: "Bedroom_Lights"
+
+api:
+  batch_delay: 0ms
+
+esphome:
+  includes:
+    - wall_switch_logic.h
+  on_boot:
+    priority: -100
+    then:
+      - binary_sensor.template.publish:
+          id: wall_button_pulse
+          state: OFF
+
+output:
+  - platform: gpio
+    id: relay_1
+    pin: GPIO12
+
+light:
+  - platform: binary
+    id: light_1
+    name: ${relay_name}
+    internal: ${smart_bulbs}
+    output: relay_1
+    restore_mode: ALWAYS_ON
+
+binary_sensor:
+  - platform: gpio
+    id: switch_1
+    internal: true
+    pin:
+      number: GPIO4
+      mode: INPUT_PULLUP
+    filters:
+      - delayed_on_off: 30ms
+    on_state:
+      - logger.log:
+          format: "Wall contact: %s"
+          args: ['x ? "HIGH" : "LOW"']
+  - platform: template
+    id: wall_button_pulse
+    name: "Wall Button Pulse"
+  - platform: template
+    name: "Relay Power"
+    entity_category: diagnostic
+    lambda: return id(light_1).current_values.is_on();
+
+script:
+  - id: send_wall_press
+    mode: single
+    then:
+      - logger.log: "SHORT PRESS: Zigbee request; 0.5-second input lockout"
+      - binary_sensor.template.publish:
+          id: wall_button_pulse
+          state: ON
+      - delay: 250ms
+      - binary_sensor.template.publish:
+          id: wall_button_pulse
+          state: OFF
+
+interval:
+  - interval: 10ms
+    startup_delay: 2s
+    then:
+      - lambda: |-
+          if (!id(switch_1).has_state()) return;
+          static WallSwitchLogic control;
+          const auto action = control.update(millis(), id(switch_1).state == ${wall_on_level});
+          switch (action) {
+            case WallSwitchLogic::Action::BULB:
+              if (${smart_bulbs}) {
+                id(send_wall_press).execute();
+              } else {
+                ESP_LOGI("wall_switch", "SHORT PRESS: bedroom relay toggle; 0.5-second input lockout");
+                id(light_1).toggle().perform();
+              }
+              break;
+            case WallSwitchLogic::Action::RELAY_ON:
+              ESP_LOGI("wall_switch", "LATCH ON: relay powered; 0.5-second input lockout");
+              id(light_1).turn_on().perform();
+              break;
+            case WallSwitchLogic::Action::RELAY_OFF:
+              ESP_LOGI("wall_switch", "LATCH OFF: relay unpowered; 0.5-second input lockout");
+              id(light_1).turn_off().perform();
+              break;
+            default:
+              break;
+          }
